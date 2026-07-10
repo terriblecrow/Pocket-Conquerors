@@ -14,6 +14,19 @@ Written in C and compiled with [SDCC](https://sdcc.sourceforge.net/) — **no
 GBDK**. The startup code, cartridge header, and all hardware access are
 hand-written.
 
+## Play the full game
+
+This is the Game Boy demake of **Conway's Conquerors**, the original 1v1
+browser strategy game. If you like it on the handheld, the full version plays
+online in seconds:
+
+- 🏠 **Official site** — https://conwaysconquerors.com
+- ▶️ **Play online** — https://play.conwayconquerors.online
+- 🕹️ **itch.io** — https://terriblecrow.itch.io/conways-conquerors
+- 💻 **This demake, in your browser** — https://conwayconquerors.com/demake/
+- 📄 **Technical report** — https://conwaysconquerors.com/RESEARCH-PAPER.md
+- 🐦‍⬛ **The studio** — https://terriblecrow.com · ✉️ contact@terriblecrow.com
+
 ---
 
 ## Play it
