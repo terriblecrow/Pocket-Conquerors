@@ -2,6 +2,49 @@
 
 History of the game, version by version.
 
+## v26 — FREE PLAY mode, an options menu, and a flicker-free colour board
+
+**New game mode — FREE PLAY.** A sandbox on a divisionless board: no zones, no
+scoring, no rounds. Paint any cells you like and run Conway's Life continuously.
+D-PAD moves the cursor, A paints/erases a cell, B runs/stops the simulation,
+SELECT clears the board, START returns to the menu. The whole board runs on one
+fixed palette so the running sim rewrites only tiles (never colour attributes),
+which is what keeps it smooth on a Game Boy Color without the screen flashing.
+
+**Reorganised main menu + OPTIONS.** The menu is now HOW TO PLAY, VS CPU, 2
+PLAYERS, FREE PLAY, OPTIONS, STATS, CREDITS — vertically centred with even
+margins. Language moved into a new OPTIONS submenu alongside two new toggles,
+MUSIC ON/OFF and SFX ON/OFF; all three settings persist in battery SRAM.
+
+**The flicker is gone (all modes).** Per-generation board evolution used to blank
+the LCD to rewrite the whole board+HUD in one shot — that blank frame was the
+flicker. It now streams only the CHANGED cells to VRAM a small budget per frame
+with the LCD on, computing the change-list and HUD in RAM before syncing to
+VBlank so each blanking window is spent only on the short writes.
+
+**No more "celeste" cells on GBC.** The related real-hardware bug — dead cells
+left tinted light-blue because a per-cell colour-attribute write was dropped —
+is fixed by never writing colour attributes during animation at all. Each board
+cell's palette is now simply its (never-changing) zone; the three zone palettes
+share colour 1 = blue and colour 2 = red, so a colony reads correctly in any
+zone from the TILE's colour index alone. The board animates with tile-only
+(bank 0) writes, so no attribute can ever be left stale. (Both the flicker and
+celeste fixes were verified on real Game Boy Color hardware via flashcart.)
+
+**Board art overhaul (GBC).** Empty cells now draw a thin board GRID instead of a
+centre dot — the grid is baked into the piece and cursor tiles too, so it stays
+unbroken around the pieces, and the board is closed top and bottom with a green
+frame. The cursor takes the current player's colour (blue on BLUE's turn, red on
+RED's) so it stands out from the dark grid. The info panel up top is a clean
+white block down to the divider line. DMG keeps its dotted board and stipple —
+monochrome needs the shading to tell the three territories apart.
+
+**Smaller fixes.** The home/neutral divider lines no longer break where a colony
+cell sits on a boundary column. The CPU "THINKING"/"PENSANDO" notice no longer
+loses its last letter on real hardware (its glyphs are baked before VBlank, then
+written in one tight pass). The title-screen gliders no longer show a tinted box
+around them and got a touch more contrast.
+
 ## v25 — HUD corruption on real hardware fixed (VBlank overrun)
 
 Real-cart bug, invisible on emulators: the HUD would show mangled text — "RND

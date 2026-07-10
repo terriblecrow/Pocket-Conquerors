@@ -10,6 +10,13 @@
 
 #include "hardware.h"
 
+/* Runtime audio toggles, set from the OPTIONS menu and persisted in SRAM.
+ * g_music_on gates the melody/harmony voices (title theme, funeral march);
+ * g_sfx_on gates every short sound effect. Both default ON. Gating happens at
+ * the lowest-level emitters below, so a single flag silences every caller. */
+static u8 g_music_on = 1;
+static u8 g_sfx_on   = 1;
+
 /* Game Boy 11-bit frequency register values for musical notes.
  * value = 2048 - 131072/freq_hz.  Higher value = higher pitch.
  * Full chromatic set so we can write proper minor-key melodies. */
@@ -65,6 +72,7 @@ static void sound_init(void) {
  * The note isn't gated here — the envelope fades it out so callers don't
  * need to manage duration. */
 static void sfx_tone(u16 freq, u8 envelope) {
+  if (!g_sfx_on) return;
   rNR21 = 0x80;                 /* 50% duty */
   rNR22 = envelope;             /* volume + decay */
   rNR23 = (u8)(freq & 0xFF);
@@ -73,6 +81,7 @@ static void sfx_tone(u16 freq, u8 envelope) {
 /* same, but with a chosen duty (0x00=12.5%, 0x40=25%, 0x80=50%, 0xC0=75%);
  * lower duty reads as a thinner, "blippier" timbre */
 static void sfx_tone_duty(u16 freq, u8 envelope, u8 duty) {
+  if (!g_sfx_on) return;
   rNR21 = duty | 0x3F;          /* duty + length data (length unused, no enable) */
   rNR22 = envelope;
   rNR23 = (u8)(freq & 0xFF);
@@ -92,6 +101,7 @@ static void sfx_back(void) { sfx_tone(N_C3, 0x92); }
  * low square; played as a short descending pair to read as "no". The caller
  * triggers it once; we set a low frequency with a slow-ish decay so it buzzes. */
 static void sfx_error(void) {
+  if (!g_sfx_on) return;
   rNR21 = 0xC0;          /* 75% duty -> buzzier tone */
   rNR22 = 0xA4;          /* mid volume, slow decay = sustained buzz */
   rNR23 = (u8)(N_C3 & 0xFF);
@@ -137,6 +147,7 @@ static void sfx_evolve(void) { sfx_tone_duty(N_G4, 0x73, 0x40); }
 #endif
 
 static void mel_note(u16 freq, u8 vol) {
+  if (!g_music_on) return;
   if (freq == N_REST) { rNR22 = 0x00; rNR24 = 0x80; return; }  /* silence ch2 */
   rNR21 = MEL_DUTY;             /* duty per build palette */
   rNR22 = vol;                  /* volume + decay envelope */
@@ -146,6 +157,7 @@ static void mel_note(u16 freq, u8 vol) {
 /* bass / harmony voice on channel 1 (sweep off). Duty per build palette so it
  * sits under the melody as a warm pad rather than competing. */
 static void mel_bass(u16 freq, u8 vol) {
+  if (!g_music_on) return;
   if (freq == N_REST) { rNR12 = 0x00; rNR14 = 0x80; return; }  /* silence ch1 */
   rNR10 = 0x00;                 /* sweep off */
   rNR11 = BASS_DUTY;            /* duty per build palette */

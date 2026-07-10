@@ -49,6 +49,12 @@ typedef signed short   i16;
 #define T_GRIDRD_D (T_DECOL+7)  /* DMG-only: red  boundary cell — stipple + left  divider      */
 #define T_HBARB    (T_DECOL+8)  /* board's bottom border: hbar shifted 1px down to fill the gap  */
 #define T_HBART    (T_DECOL+9)  /* board's top border: hbar shifted 1px up to centre the board   */
+#define T_FPGRID   (T_HBART+1)  /* free-play empty cell: dot in color 1 (neutral) so the whole
+                                 * board can share ONE fixed palette and the running sim only
+                                 * ever rewrites tiles (never colour attributes) — see FREE PLAY */
+#define T_HBARC    (T_FPGRID+1) /* GBC bottom close: 1px line at the tile's TOP edge, so the
+                                 * board grid closes right under the last cell row (the grid
+                                 * draws each cell's top line, leaving the last row open) */
 #define T_FONT_BASE 16    /* font occupies 16..(16+GLYPH_COUNT-1) = 16..64 */
 
 static const u8 patt_blank[16]   = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
@@ -61,6 +67,11 @@ static const u8 patt_blank[16]   = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 static const u8 patt_blue[16]    = {0x7E,0x7E,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x7E,0x7E};
 static const u8 patt_red[16]     = {0x18,0x18,0x3C,0x3C,0x66,0x66,0xC3,0xC3,0xC3,0xC3,0x66,0x66,0x3C,0x3C,0x18,0x18};
 static const u8 patt_cursor[16]  = {0xFF,0xFF,0x81,0x81,0x81,0x81,0x81,0x81,0x81,0x81,0x81,0x81,0x81,0x81,0xFF,0xFF};
+/* GBC player-coloured cursor boxes: the same box outline as patt_cursor but drawn
+ * in colour index 1 (blue) or 2 (red), so under the zone palettes the cursor takes
+ * the current player's colour and stands out from the dark (c3) fixed board grid. */
+static const u8 patt_cursor_b[16]= {0xFF,0x00,0x81,0x00,0x81,0x00,0x81,0x00,0x81,0x00,0x81,0x00,0x81,0x00,0xFF,0x00};
+static const u8 patt_cursor_r[16]= {0x00,0xFF,0x00,0x81,0x00,0x81,0x00,0x81,0x00,0x81,0x00,0x81,0x00,0x81,0x00,0xFF};
 /* empty-cell grid tiles: a faint frame so every square is visible. The three
  * zones get slightly different marks so territory reads at a glance:
  *   neutral home/centre — a small centre dot
@@ -68,6 +79,11 @@ static const u8 patt_cursor[16]  = {0xFF,0xFF,0x81,0x81,0x81,0x81,0x81,0x81,0x81
  *   red zone            — dot + a faint right edge
  * (low bitplane only -> light gray, so live cells and the cursor still pop) */
 static const u8 patt_grid[16]    = {0x00,0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x18,0x18,0x00,0x00,0x00,0x00,0x00,0x00};
+/* GBC-only empty-cell tile: instead of a centre dot, a thin 1px grid (top edge +
+ * left edge, colour 3 = zone-dark). Adjacent cells' edges join into a continuous
+ * board grid over the colour-separated zones — a cleaner "board" look than the
+ * isolated dots, which stay only on DMG where colour can't separate the zones. */
+static const u8 patt_grid_gbc[16]= {0xFF,0xFF,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80,0x80};
 static const u8 patt_gridb[16]   = {0x80,0x80,0x80,0x80,0x80,0x80,0x98,0x98,0x98,0x98,0x80,0x80,0x80,0x80,0x80,0x80};
 static const u8 patt_gridr[16]   = {0x01,0x01,0x01,0x01,0x01,0x01,0x19,0x19,0x19,0x19,0x01,0x01,0x01,0x01,0x01,0x01};
 /* Home/neutral boundary cells. Same faint centre dot as the zone grid, plus a
@@ -88,6 +104,13 @@ static const u8 patt_gridrd[16]  = {0x80,0x80,0x80,0x80,0x80,0x80,0x98,0x98,0x98
 static const u8 patt_gridh_d[16] = {0x42,0x00,0x00,0x00,0x24,0x00,0x18,0x18,0x18,0x18,0x42,0x00,0x00,0x00,0x24,0x00};
 static const u8 patt_gridbd_d[16]= {0x43,0x01,0x01,0x01,0x25,0x01,0x19,0x19,0x19,0x19,0x43,0x01,0x01,0x01,0x25,0x01};
 static const u8 patt_gridrd_d[16]= {0xC2,0x80,0x80,0x80,0xA4,0x80,0x98,0x98,0x98,0x98,0xC2,0x80,0x80,0x80,0xA4,0x80};
+/* Free-play empty cell: the same faint centre dot as patt_grid, but drawn in
+ * COLOR 1 (low bitplane only) instead of color 3. Under the dedicated free-play
+ * palette (pal 3: neutral field + neutral color-1 + blue color-3 ink) this dot
+ * stays neutral while live cells (color-3 block) read blue — so the entire board
+ * shares one palette and the running simulation rewrites only tiles, never the
+ * colour attributes that used to be left stale (the "celeste" leftover cells). */
+static const u8 patt_fpgrid[16]  = {0x00,0x00,0x00,0x00,0x00,0x00,0x18,0x18,0x18,0x18,0x00,0x00,0x00,0x00,0x00,0x00};
 static const u8 patt_wall[16]    = {0x18,0x00,0x18,0x00,0x18,0x00,0x18,0x00,0x18,0x00,0x18,0x00,0x18,0x00,0x18,0x00};
 static const u8 patt_border[16]  = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 /* horizontal frame line: a solid bar mid-tile, to close the board top & bottom */
@@ -96,6 +119,10 @@ static const u8 patt_hbar[16]    = {0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF
  * the 1px screen nudge it reaches the very bottom edge and fills the leftover gap
  * (the top border and menu rules keep the centered patt_hbar). */
 static const u8 patt_hbarb[16]   = {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0xFF,0xFF,0xFF,0xFF,0x00,0x00,0x00,0x00};
+/* GBC grid-close: a 1px line at the very TOP of the tile, so placed at BORDER_BOT
+ * it lands exactly under the last board row (map y 136) and completes the board
+ * grid — matching the 1px per-cell grid lines above it. */
+static const u8 patt_hbarc[16]   = {0xFF,0xFF,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 /* Top-border variant: the 2px line one pixel HIGHER than patt_hbar (rows 2-3),
  * so the board sits equidistant between the top and bottom border lines. Only
  * the board's top edge uses it; menu rules keep the centered patt_hbar. */
@@ -121,6 +148,19 @@ static const u8 patt_diam[16]    = {0x00,0x00,0x18,0x18,0x3C,0x3C,0x7E,0x7E,0x3C
  * (hollow diamond). */
 static const u8 patt_bluec[16]   = {0xFF,0xFF,0x81,0x81,0xBD,0xBD,0xBD,0xBD,0xBD,0xBD,0xBD,0xBD,0x81,0x81,0xFF,0xFF};
 static const u8 patt_redc[16]    = {0xFF,0xFF,0xA5,0xA5,0xC3,0xC3,0x99,0x99,0x99,0x99,0xC3,0xC3,0xA5,0xA5,0xFF,0xFF};
+/* GBC-only colony tiles. Same SHAPES as patt_blue/red/bluec/redc, but the ink is
+ * drawn in COLOUR INDEX 1 (blue) / 2 (red) instead of 3. Combined with zone
+ * palettes whose c1 is always blue and c2 always red, a colony reads correctly in
+ * ANY zone from the tile alone — so every cell's palette attribute is just its
+ * (never-changing) zone, and the running board is repainted with tile writes only
+ * (bank 0), never colour attributes. That removes the GBC flicker without leaving
+ * stale "celeste" cells. The cursor ring stays colour 3 so it matches T_CURSOR on
+ * empty cells. DMG keeps the colour-3 patterns above (no palettes there; colonies
+ * are told apart by shape). */
+static const u8 patt_blue_c[16]  = {0x7E,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,0x7E,0x00};
+static const u8 patt_red_c[16]   = {0x00,0x18,0x00,0x3C,0x00,0x66,0x00,0xC3,0x00,0xC3,0x00,0x66,0x00,0x3C,0x00,0x18};
+static const u8 patt_bluec_c[16] = {0xFF,0xFF,0x81,0x81,0xBD,0x81,0xBD,0x81,0xBD,0x81,0xBD,0x81,0x81,0x81,0xFF,0xFF};
+static const u8 patt_redc_c[16]  = {0xFF,0xFF,0xA5,0x81,0xC3,0x81,0x99,0x81,0x99,0x81,0xC3,0x81,0xA5,0x81,0xFF,0xFF};
 
 /* ───────────────────── Board geometry ───────────────────── */
 #define BW 20
@@ -147,7 +187,8 @@ static u8 nextb[BN];
 
 /* ───────────────────── Game state ───────────────────── */
 typedef enum { S_TITLE, S_MENU, S_HELP, S_DIFF, S_PLAY, S_GAMEOVER, S_CREDITS,
-               S_2PMENU, S_LINKWAIT, S_STATS, S_PAUSE, S_ACK } State;
+               S_2PMENU, S_LINKWAIT, S_STATS, S_PAUSE, S_ACK, S_OPTIONS,
+               S_FREE } State;
 static State state;
 
 static u8 menu_sel;
@@ -253,10 +294,14 @@ static void sram_wr(u8 off, u16 v){ SRAM[off]=(u8)(v&0xFF); SRAM[off+1]=(u8)(v>>
 static void stats_load(void){
   sram_on();
   if(SRAM[0]!='T' || SRAM[1]!='C'){
-    u8 i; for(i=2;i<16;i++) SRAM[i]=0;   /* 14 = language, 15 = spare */
+    u8 i; for(i=2;i<17;i++) SRAM[i]=0;   /* 14=language, 15=music-off, 16=sfx-off */
     SRAM[0]='T'; SRAM[1]='C';
   }
   lang = SRAM[14]; if(lang>1) lang=0;    /* restore saved language (garbage-safe) */
+  /* Audio toggles are stored INVERTED (as "off" flags) so a freshly-zeroed cart
+   * boots with music and SFX ON by default. */
+  g_music_on = (SRAM[15] & 1) ? 0 : 1;
+  g_sfx_on   = (SRAM[16] & 1) ? 0 : 1;
   st_played=sram_rd(ST_CPU_PLAYED); st_wins=sram_rd(ST_CPU_WINS);
   st_loss  =sram_rd(ST_CPU_LOSS);   st_draw=sram_rd(ST_CPU_DRAW);
   st_bwon  =sram_rd(ST_2P_BLUE);    st_rwon=sram_rd(ST_2P_RED);
@@ -273,6 +318,15 @@ static void stats_save(void){
 }
 /* Persist just the language byte (tiny, called on every menu toggle). */
 static void lang_save(void){ sram_on(); SRAM[14]=lang; sram_off(); }
+/* Persist the audio toggles (stored inverted, see stats_load). Called from the
+ * OPTIONS menu whenever MUSIC or SFX is flipped. */
+static void audio_save(void){
+  sram_on();
+  SRAM[0]='T'; SRAM[1]='C';
+  SRAM[15] = g_music_on ? 0 : 1;
+  SRAM[16] = g_sfx_on   ? 0 : 1;
+  sram_off();
+}
 static void stats_reset(void){
   st_played=st_wins=st_loss=st_draw=st_bwon=st_rwon=0;
   stats_save();
@@ -505,20 +559,19 @@ static u8 zone_of(u8 x){
   return 0;
 }
 
-/* Tile for an empty cell at column x. The only vertical lines on the board are
- * the two home/neutral dividers. On DMG (no per-tile colour) the home zones also
- * get a faint corner stipple so the three zones differ by shading too; on GBC the
- * homes stay clean because colour already separates them. Neutral is always the
- * plain dotted tile. */
+/* Tile for an empty cell at column x.
+ *  GBC: colour already separates the three zones, so every empty cell uses the
+ *  same thin board GRID tile (T_GRID is loaded with patt_grid_gbc on GBC). The
+ *  zone boundaries read from the colour change plus the grid line; colony cells
+ *  sitting on a boundary still carry the divider via board_tile's div variants.
+ *  DMG (no per-tile colour): keep the centre dot, the home stipple and the two
+ *  crisp home/neutral dividers so the territories stay legible in monochrome. */
 static u8 empty_tile(u8 x){
-  u8 dmg = !is_gbc();
-  if(x==ZONE_BLUE_MAX) return dmg ? T_GRIDBD_D : T_GRIDBD;   /* last blue col, right divider */
-  if(x==ZONE_RED_MIN)  return dmg ? T_GRIDRD_D : T_GRIDRD;   /* first red col, left divider  */
-  if(dmg){
-    u8 z=zone_of(x);
-    if(z==BLUE || z==RED) return T_GRIDH_D;                  /* home interior: stipple */
-  }
-  return T_GRID;                                            /* neutral / GBC home: plain dot */
+  if(is_gbc()) return T_GRID;                               /* uniform board grid */
+  if(x==ZONE_BLUE_MAX) return T_GRIDBD_D;                   /* last blue col, right divider */
+  if(x==ZONE_RED_MIN)  return T_GRIDRD_D;                   /* first red col, left divider  */
+  { u8 z=zone_of(x); if(z==BLUE || z==RED) return T_GRIDH_D; }  /* home interior: stipple */
+  return T_GRID;                                            /* neutral: plain dot */
 }
 static void clear_board(void){ u16 i; for(i=0;i<BN;i++) board[i]=DEAD; }
 static void count_cells(u8 *b, u8 *r){
@@ -592,22 +645,68 @@ static void setup_board(void){
 }
 
 /* ───────────────────── Drawing ───────────────────── */
+/* Divider-line tile variants. A cell (colony or cursor) sitting on a home/neutral
+ * boundary column used to hide the 1px divider that the empty boundary tile
+ * carries, breaking the line. These slots hold the colony/cursor shapes with the
+ * divider line baked back in (generated in load_tiles). Two sets: right-edge line
+ * (blue home, col ZONE_BLUE_MAX) and left-edge line (red home, col ZONE_RED_MIN).
+ * Placed high in VRAM (past the font/crow/big-text pools). */
+#define T_DIVR 200   /* right-edge: BLUE,RED,BLUEC,REDC,CURSOR (in this order) */
+#define T_DIVL 205   /* left-edge:  same order                                 */
+/* GBC main-board tiles: the colony/cursor shapes with the board GRID (top+left
+ * lines) baked in, so the grid stays complete AROUND the pieces — an empty T_GRID
+ * cell and a piece cell each draw their own grid edges, leaving no gap. Plus a
+ * player-coloured cursor (blue on BLUE's turn, red on RED's) so it reads clearly
+ * against the dark fixed grid instead of blending into it. */
+#define T_BLUE_G   210
+#define T_RED_G    211
+#define T_BLUEC_G  212
+#define T_REDC_G   213
+#define T_CURSOR_B 214   /* blue cursor box (BLUE's turn) */
+#define T_CURSOR_R 215   /* red  cursor box (RED's turn)  */
+static u8 div_tile(u8 t, u8 right){
+  u8 b = right ? T_DIVR : T_DIVL;
+  if(t==T_BLUE)   return (u8)(b+0);
+  if(t==T_RED)    return (u8)(b+1);
+  if(t==T_BLUEC)  return (u8)(b+2);
+  if(t==T_REDC)   return (u8)(b+3);
+  if(t==T_CURSOR) return (u8)(b+4);
+  return t;
+}
+/* The BG tile for board cell (x,y): the colony/cursor/empty choice shared by every
+ * draw path. GBC uses grid-integrated tiles + a player-coloured cursor (the grid
+ * lives in every tile, so it never breaks around pieces, and zones read by colour).
+ * DMG uses the plain shapes + the divider-line variant on the two boundary columns
+ * so the home/neutral divider stays unbroken through pieces in monochrome. */
+static u8 board_tile(u8 x, u8 y, u8 oncur){
+  u8 v=board[y*BW+x];
+  if(is_gbc()){
+    if(v==BLUE) return oncur?T_BLUEC_G:T_BLUE_G;
+    if(v==RED)  return oncur?T_REDC_G:T_RED_G;
+    if(oncur)   return (cur_player==BLUE)?T_CURSOR_B:T_CURSOR_R;
+    return empty_tile(x);                        /* T_GRID (board grid) on GBC */
+  }
+  { u8 t;
+    if(v==BLUE) t=oncur?T_BLUEC:T_BLUE;
+    else if(v==RED) t=oncur?T_REDC:T_RED;
+    else if(oncur) t=T_CURSOR;
+    else return empty_tile(x);
+    if(x==ZONE_BLUE_MAX) return div_tile(t,1);   /* right-edge divider */
+    if(x==ZONE_RED_MIN)  return div_tile(t,0);   /* left-edge divider  */
+    return t;
+  }
+}
+
 /* Draw a single board cell (tile + GBC color) in place. Small enough to do
  * during VBlank with the LCD on, so moving the cursor doesn't flash the whole
- * screen. */
+ * screen. Colour attribute = the cell's ZONE (colony colour comes from the tile's
+ * colour index — T_BLUE=c1, T_RED=c2 — so it reads right in any zone). Zone never
+ * changes, so this matches what draw_board laid down; one write here is harmless. */
 static void draw_cell(u8 x, u8 y) {
-  u8 v = board[y*BW+x];
   u8 oncur = (state==S_PLAY && x==cx && y==cy);
-  u8 t, pal;
-  if(v==BLUE){ t=oncur?T_BLUEC:T_BLUE; pal=1; }
-  else if(v==RED){ t=oncur?T_REDC:T_RED; pal=2; }
-  else if(oncur){ t=T_CURSOR; pal=(zone_of(x)==BLUE)?1:(zone_of(x)==RED)?2:0; }
-  else {
-    u8 z=zone_of(x);
-    t = empty_tile(x);
-    pal = (z==BLUE)?1:(z==RED)?2:0;
-  }
-  map_put(BOARD_OX+x, BOARD_OY+y, t);
+  u8 z = zone_of(x);
+  u8 pal = (z==BLUE)?1:(z==RED)?2:0;
+  map_put(BOARD_OX+x, BOARD_OY+y, board_tile(x,y,oncur));
   if(is_gbc()){
     rVBK=1;
     VRAM_MAP[(u16)(BOARD_OY+y)*32 + (BOARD_OX+x)] = pal;
@@ -618,24 +717,22 @@ static void draw_cell(u8 x, u8 y) {
 static void draw_board(void){
   u8 x,y;
   u8 gbc = is_gbc();
-  /* close the board with horizontal frame lines top and bottom */
+  /* close the board with horizontal frame lines top and bottom. On GBC the board
+   * is a grid (each cell draws its own top line), so the bottom is closed right
+   * under the last cell row with T_HBARC (line at the tile top); DMG keeps the
+   * screen-bottom T_HBARB that pairs with its dotted board. */
   for(x=0;x<BW;x++){
-    map_put(BOARD_OX+x, BORDER_TOP, T_HBART);   /* shifted up 1px to centre the board */
-    map_put(BOARD_OX+x, BORDER_BOT, T_HBARB);   /* shifted down 1px to fill the gap */
+    /* GBC top & bottom both use T_HBARC (line at the tile's TOP edge): the top
+     * line sits right under the white HUD (dividing the white panel from the green
+     * frame, with NO green left in the white sector), and the bottom line sits
+     * right under the last board row. Both rows are green, so the board is framed
+     * in green top and bottom alike. DMG keeps its own framing tiles. */
+    map_put(BOARD_OX+x, BORDER_TOP, gbc ? T_HBARC : T_HBART);
+    map_put(BOARD_OX+x, BORDER_BOT, gbc ? T_HBARC : T_HBARB);
   }
   for(y=0;y<BH;y++)for(x=0;x<BW;x++){
-    u8 v=board[y*BW+x];
-    u8 t;
     u8 oncur=(state==S_PLAY && x==cx && y==cy);
-    if(v==BLUE) t=oncur?T_BLUEC:T_BLUE;
-    else if(v==RED) t=oncur?T_REDC:T_RED;
-    else if(oncur) t=T_CURSOR;
-    else {
-      /* empty cell: plain dotted square, except the two home/neutral boundary
-       * columns which carry the divider line (see empty_tile). */
-      t = empty_tile(x);
-    }
-    map_put(BOARD_OX+x, BOARD_OY+y, t);
+    map_put(BOARD_OX+x, BOARD_OY+y, board_tile(x,y,oncur));
   }
   /* GBC: color the whole screen. HUD rows and frame neutral/paper; board cells
    * by colony/zone. Done in one bank-1 pass so nothing from a previous screen
@@ -646,16 +743,20 @@ static void draw_board(void){
     /* default everything to paper white */
     for(ay=0;ay<18;ay++) for(ax=0;ax<20;ax++)
       VRAM_MAP[(u16)ay*32 + ax] = 4;
-    /* board cells */
+    /* board cells: colour attribute = ZONE only (colony colour is in the tile).
+     * This is the single, static colour pass for the whole game — nothing during
+     * play rewrites these attributes, so no cell can be left mis-tinted. */
     for(y=0;y<BH;y++)for(x=0;x<BW;x++){
-      u8 v=board[y*BW+x];
-      u8 pal;
-      if(v==BLUE) pal=1;
-      else if(v==RED) pal=2;
-      else { u8 z=zone_of(x); pal=(z==BLUE)?1:(z==RED)?2:0; }
+      u8 z=zone_of(x);
+      u8 pal=(z==BLUE)?1:(z==RED)?2:0;
       VRAM_MAP[(u16)(BOARD_OY+y)*32 + (BOARD_OX+x)] = pal;
     }
-    /* frame lines neutral green */
+    /* Both frame rows are NEUTRAL green: the top row's line divides the white HUD
+     * from the green frame, and the field below it matches the bottom's green — so
+     * the board finishes in green top AND bottom. The white HUD sector itself stays
+     * clean: the 1px SCY nudge wraps map row 31 in at the very top, so paper it too
+     * (that was the only stray green left in the white area). */
+    for(ax=0;ax<20;ax++) VRAM_MAP[(u16)31*32 + ax] = 4;
     for(x=0;x<BW;x++){
       VRAM_MAP[(u16)BORDER_TOP*32 + (BOARD_OX+x)] = 0;
       VRAM_MAP[(u16)BORDER_BOT*32 + (BOARD_OX+x)] = 0;
@@ -719,8 +820,15 @@ static void draw_hud(void){
  * VBlank so it actually latches before the CPU work begins, then the normal HUD
  * redraw after the move clears it. */
 static void cpu_thinking_on(void){
+  /* Both notices are exactly 8 chars. Bake their tiles BEFORE the VBlank (glyph
+   * lookups are the slow part), then write all 8 in a tight loop inside the blank
+   * — otherwise the last store spilled past VBlank on real hardware and was
+   * dropped, showing "THINKIN"/"PENSAND". */
+  const char *s = TR("THINKING","PENSANDO");
+  u8 t[8], i;
+  for(i=0;i<8;i++) t[i]=(u8)(T_FONT_BASE + glyph_of(s[i]));
   wait_vbl();
-  print_at(11,0,TR("THINKING","PENSANDO"));
+  { volatile u8 *d = VRAM_MAP + 11; for(i=0;i<8;i++) d[i]=t[i]; }
 }
 
 static void draw_title(void){
@@ -772,9 +880,13 @@ static void draw_title(void){
   /* GBC coloring: dark label look */
   if (is_gbc()) {
     clear_attr(5);                 /* dark field, bright ink everywhere */
-    /* color each glider in its colony glow */
-    fill_attr(1,6,3,3, 6);  fill_attr(5,9,3,3, 6);   /* blue gliders -> cyan */
-    fill_attr(16,6,3,3, 7); fill_attr(12,9,3,3, 7);  /* red gliders -> red */
+    /* Colour each glider CELL individually (not a bounding box). The glow
+     * palettes share the starfield's field colour (c0), so the dark background
+     * shows cleanly between the cells — no tinted rectangle around a glider. */
+    set_attr(2,6,6);  set_attr(3,7,6);  set_attr(1,8,6);  set_attr(2,8,6);  set_attr(3,8,6);   /* blue A */
+    set_attr(6,9,6);  set_attr(7,10,6); set_attr(5,11,6); set_attr(6,11,6); set_attr(7,11,6);  /* blue B */
+    set_attr(17,6,7); set_attr(16,7,7); set_attr(16,8,7); set_attr(17,8,7); set_attr(18,8,7);  /* red C */
+    set_attr(13,9,7); set_attr(12,10,7);set_attr(12,11,7);set_attr(13,11,7);set_attr(14,11,7); /* red D */
     /* sparkle constellation alternates */
     set_attr(9,7,6); set_attr(9,9,6);
     set_attr(10,7,7); set_attr(10,9,7);
@@ -816,18 +928,42 @@ static void draw_menu(void){
   else rBGP = 0xE4;              /* restore normal palette (title inverts it) */
   print_at(lang?3:5,1,TR("MAIN MENU","MENU PRINCIPAL"));
   deco_header(lang?3:5,1,lang?14:9);
-  print_at(4,4,TR("LANG: ENGLISH","IDIOMA: ESPA#OL"));
+  /* Seven entries centered in the space below the header (rows 3..17): the list
+   * spans rows 4..16 (step 2), leaving one blank row above (row 3) and one below
+   * (row 17), so it sits symmetrically and clear of the title. No footer bar —
+   * it would crowd the list back against the header on this 7-item screen. */
+  print_at(4,4,TR("HOW TO PLAY","COMO JUGAR"));
   print_at(4,6,"VS CPU");
   print_at(4,8,TR("2 PLAYERS","2 JUGADORES"));
-  print_at(4,10,TR("HOW TO PLAY","COMO JUGAR"));
-  print_at(4,12,TR("STATS","ESTADISTICAS"));
-  print_at(4,14,TR("CREDITS","CREDITOS"));
+  print_at(4,10,TR("FREE PLAY","JUEGO LIBRE"));
+  print_at(4,12,TR("OPTIONS","OPCIONES"));
+  print_at(4,14,TR("STATS","ESTADISTICAS"));
+  print_at(4,16,TR("CREDITS","CREDITOS"));
   /* small diamond bullets beside each option */
-  map_put(3,4,T_DIAM); map_put(3,6,T_DIAM); map_put(3,8,T_DIAM);
-  map_put(3,10,T_DIAM); map_put(3,12,T_DIAM); map_put(3,14,T_DIAM);
-  deco_footer(16);
-  { u8 ty=(menu_sel==0)?4:(menu_sel==1)?6:(menu_sel==2)?8:(menu_sel==3)?10:(menu_sel==4)?12:14;
-    print_at(2,ty,">"); }
+  { u8 i; for(i=0;i<7;i++) map_put(3,(u8)(4+i*2),T_DIAM); }
+  print_at(2,(u8)(4+menu_sel*2),">");
+  lcd_on();
+}
+
+/* OPTIONS submenu: language, music, and SFX toggles. Each row shows its live
+ * value; A on a row flips it (and the whole screen is repainted so the label
+ * updates). Reached from the main menu; B returns there. */
+static void draw_options(void){
+  lcd_off();
+  clear_map();
+  if(is_gbc()) clear_attr(4);
+  else rBGP = 0xE4;
+  print_at(lang?5:6,2,TR("OPTIONS","OPCIONES"));
+  deco_header(lang?5:6,2,lang?8:7);
+  print_at(5,7, TR("LANG: ENGLISH","IDIOMA: ESPA#OL"));
+  print_at(5,9, g_music_on ? TR("MUSIC: ON","MUSICA: SI")
+                           : TR("MUSIC: OFF","MUSICA: NO"));
+  print_at(5,11, g_sfx_on ? TR("SFX: ON","EFECTOS: SI")
+                          : TR("SFX: OFF","EFECTOS: NO"));
+  map_put(4,7,T_DIAM); map_put(4,9,T_DIAM); map_put(4,11,T_DIAM);
+  print_at(3,(u8)(7+menu_sel*2),">");
+  deco_footer(14);
+  print_at(2,16,TR("B: BACK","B: VOLVER"));
   lcd_on();
 }
 
@@ -1482,6 +1618,14 @@ static u16 chg_off[BN];
 static u8  chg_tile[BN];
 static u8  chg_pal[BN];
 static u16 chg_count;
+/* Cells streamed to VRAM per VBlank during the flash-free board update. Each cell
+ * now writes ONLY a tile (bank 0) — colours are static per-zone attributes set
+ * once by draw_board, so no bank-1 write and no rVBK toggle happen while the board
+ * animates. That halves the per-cell cost (no colour write is the whole point: it
+ * is what could be dropped and left a "celeste" cell), so the batch fits a VBlank
+ * with wide margin. At 32/frame even a full-board evolution (~280 cells) paints in
+ * <9 frames, well inside the per-generation hold, so it is never left half-drawn. */
+#define CHG_PER 32
 
 static void build_changes(void){
   u8 x,y;
@@ -1490,31 +1634,21 @@ static void build_changes(void){
     u8 oncur=(x==cx && y==cy);
     u8 cur=board[y*BW+x];
     if(cur!=prevboard[y*BW+x] || oncur){
-      u8 t, pal;
-      if(cur==BLUE){ t=oncur?T_BLUEC:T_BLUE; pal=1; }
-      else if(cur==RED){ t=oncur?T_REDC:T_RED; pal=2; }
-      else if(oncur){ u8 z=zone_of(x); t=T_CURSOR; pal=(z==BLUE)?1:(z==RED)?2:0; }
-      else { u8 z=zone_of(x); t=empty_tile(x); pal=(z==BLUE)?1:(z==RED)?2:0; }
       chg_off[chg_count]=(u16)(BOARD_OY+y)*32 + (BOARD_OX+x);
-      chg_tile[chg_count]=t;
-      chg_pal[chg_count]=pal;
+      chg_tile[chg_count]=board_tile(x,y,oncur);
       chg_count++;
     }
   }
 }
 
-/* Write up to `limit` queued changes starting at *idx, at VBlank. Writes tile
- * (bank 0) and color (bank 1) for each. Returns having advanced *idx. */
+/* Write up to `limit` queued tile changes starting at *idx, at VBlank — bank 0
+ * ONLY. Colour is a static per-zone attribute (draw_board), so nothing here
+ * touches bank 1: no rVBK toggle, no colour write to be dropped. Returns having
+ * advanced *idx. */
 static void blit_changes(u16 *idx, u8 limit){
-  u8 n=0; u8 gbc=is_gbc();
+  u8 n=0;
   while(*idx<chg_count && n<limit){
-    u16 off=chg_off[*idx];
-    VRAM_MAP[off]=chg_tile[*idx];        /* bank 0 (tile) */
-    if(gbc){
-      rVBK=1;
-      VRAM_MAP[off]=chg_pal[*idx];       /* bank 1 (color) */
-      rVBK=0;
-    }
+    VRAM_MAP[chg_off[*idx]]=chg_tile[*idx];   /* bank 0 (tile) only */
     (*idx)++; n++;
   }
 }
@@ -1562,14 +1696,35 @@ static void blit_buffers(void){
 }
 
 static void redraw_board_spread(u8 frames){
-  u8 i;
-  /* Build everything in RAM, then do the quick blits with the LCD off only for
-   * that moment. Correct colors on hardware, with the smallest possible
-   * flicker. */
-  build_buffers();
-  hud_compute(); hud_bake();     /* prepare HUD tiles (no VRAM yet) */
-  blit_buffers();
-  for(i=0;i<frames;i++){ wait_vbl(); while(rLY==144){} }
+  u16 idx=0;
+  u8 held;
+  /* Flash-free board update (all modes). The old path blanked the LCD to rewrite
+   * the whole board+HUD in a single shot — that blank frame was the flicker.
+   * Instead we build a list of ONLY the cells whose tile/colour changed (in RAM,
+   * before touching VRAM), then stream it to VRAM a small budget per frame WITH
+   * THE LCD ON. Every write is issued right at VBlank start and the per-frame
+   * batch is sized to fit the VBlank window, so nothing lands during active
+   * display (no dropped colour attributes, the "stale celeste" failure) and there
+   * is no blank frame. Heavy work (build_changes, hud_compute) is done up front so
+   * each VBlank is spent only on the short writes. */
+  build_changes();
+  hud_compute(); hud_bake();
+  /* Frame 0: dedicate the VBlank to the HUD (its ~40-tile write is the single
+   * biggest chunk) plus the soft evolution tick. No cells yet. */
+  wait_vbl();
+  sfx_evolve();
+  hud_write();
+  while(rLY==144){}
+  held=1;
+  /* Following frames: stream the changed cells, CHG_PER at a time, until drained.
+   * Hold until at least `frames` frames have elapsed AND the board is fully
+   * painted, so the next turn never begins on a half-drawn board. */
+  while(held<frames || idx<chg_count){
+    wait_vbl();
+    if(idx<chg_count) blit_changes(&idx, CHG_PER);
+    while(rLY==144){}
+    if(held<255) held++;
+  }
 }
 
 static void anim_step_and_hold(u8 frames){
@@ -1749,7 +1904,129 @@ static void draw_linkwait(u8 as_host){
   lcd_on();
 }
 
+/* ───────────────────── FREE PLAY (sandbox) ─────────────────────
+ * A divisionless board: no zones, no scoring, no rounds. Paint any cells you
+ * like and run Conway's Life continuously, as smoothly as the hardware allows.
+ * Living cells are drawn BLUE; the whole board is uniform neutral. Controls:
+ *   D-PAD  move cursor       A  toggle a cell (paint / erase)
+ *   B      run / stop sim     SELECT  clear the board     START  back to menu
+ * Rendering reuses the change-queue (chg_*) machinery: each generation only the
+ * changed cells are streamed to VRAM during VBlank (the LCD stays ON, so there
+ * is no flash), spread over a few frames at a fixed per-VBlank budget so it can
+ * never overrun the blanking window on real hardware. */
+static u8  fp_running;     /* 0 = editing (paused), 1 = simulating */
+static u8  fp_hold;        /* frames to wait before the next generation */
+static u16 fp_flush;       /* cursor into the chg_* queue while flushing */
+#define FP_BUDGET 40       /* cells written to VRAM per VBlank (hardware-safe) */
+#define FP_HOLD   2        /* frames held between generations (pacing) */
+
+/* The tile for one free-play cell. The whole board shares ONE palette (pal 3 on
+ * GBC), so colour lives in the tile's ink index, not a per-cell attribute:
+ *   live cell  -> T_BLUE / T_BLUEC   (color-3 ink -> blue)
+ *   empty cell -> T_FPGRID           (color-1 dot -> neutral, never blue)
+ *   cursor     -> T_CURSOR ring
+ * This is what lets the running sim update tiles only (bank 0) and never rewrite
+ * colour attributes (bank 1) — so no dead cell can be left tinted "celeste". */
+static u8 fp_tile(u8 x, u8 y){
+  u8 oncur = (x==cx && y==cy);
+  u8 v = board[y*BW+x];
+  if(v)   return oncur?T_BLUEC:T_BLUE;
+  if(oncur) return T_CURSOR;
+  return T_FPGRID;
+}
+/* Draw one cell — tile only. The palette was set uniformly (LCD off) when the
+ * board was first painted and never changes, so there is no bank-1 write here. */
+static void fp_draw_cell(u8 x, u8 y){
+  map_put(BOARD_OX+x, BOARD_OY+y, fp_tile(x,y));
+}
+/* Queue the cells whose TILE changed since the last snapshot into chg_off/
+ * chg_tile (no colour — the palette is uniform). Heavy (scans the board); the
+ * caller runs it BEFORE syncing to VBlank so only the light writes land there. */
+static void fp_build_changes(void){
+  u8 x,y;
+  chg_count=0;
+  for(y=0;y<BH;y++)for(x=0;x<BW;x++){
+    u8 oncur=(x==cx && y==cy);
+    u8 cur=board[y*BW+x];
+    if(cur!=prevboard[y*BW+x] || oncur){
+      chg_off[chg_count]=(u16)(BOARD_OY+y)*32 + (BOARD_OX+x);
+      chg_tile[chg_count]=fp_tile(x,y);
+      chg_count++;
+    }
+  }
+}
+/* Write up to `limit` queued tile changes starting at *idx — bank 0 ONLY. No
+ * rVBK toggling and no colour write, so a full FP_BUDGET batch fits comfortably
+ * inside one VBlank on GBC. Call at VBlank start. */
+static void fp_blit_changes(u16 *idx, u8 limit){
+  u8 n=0;
+  while(*idx<chg_count && n<limit){
+    VRAM_MAP[chg_off[*idx]] = chg_tile[*idx];
+    (*idx)++; n++;
+  }
+}
+static void draw_free_board(void){
+  u8 x,y;
+  lcd_off();
+  clear_map();
+  if(is_gbc()) clear_attr(4); else rBGP = 0xE4;
+  /* two-row header: title + run/stop state, then a compact controls hint */
+  print_at(0,0,TR("FREE PLAY","JUEGO LIBRE"));
+  print_at(14,0, fp_running ? "RUN " : "STOP");
+  print_at(0,1,TR("A:CELL B:RUN SEL:CLR","A:CEL B:SIM SEL:BOR"));
+  /* board frame lines, top and bottom */
+  for(x=0;x<BW;x++){
+    map_put(BOARD_OX+x, BORDER_TOP, T_HBART);
+    map_put(BOARD_OX+x, BORDER_BOT, T_HBARB);
+  }
+  for(y=0;y<BH;y++)for(x=0;x<BW;x++)
+    map_put(BOARD_OX+x, BOARD_OY+y, fp_tile(x,y));
+  if(is_gbc()){
+    u8 ax,ay;
+    rVBK=1;
+    /* HUD text rows default to paper (white field, dark ink) */
+    for(ay=0;ay<18;ay++) for(ax=0;ax<20;ax++)
+      VRAM_MAP[(u16)ay*32 + ax] = 4;
+    /* board interior: ONE uniform free-play palette. Set once here (LCD off) and
+     * never touched again while the sim runs -> no colour attribute can go stale */
+    for(y=0;y<BH;y++)for(x=0;x<BW;x++)
+      VRAM_MAP[(u16)(BOARD_OY+y)*32 + (BOARD_OX+x)] = 3;
+    /* frame lines neutral */
+    for(x=0;x<BW;x++){
+      VRAM_MAP[(u16)BORDER_TOP*32 + (BOARD_OX+x)] = 0;
+      VRAM_MAP[(u16)BORDER_BOT*32 + (BOARD_OX+x)] = 0;
+    }
+    rVBK=0;
+  }
+  lcd_on();
+}
+static void start_free(void){
+  mel_stop(); mel_playing=0;      /* the sandbox is silent but for the place blip */
+  if(!is_gbc()) rBGP = 0xE4;
+  clear_board();
+  cx=BW/2; cy=BH/2;
+  fp_running=0; fp_hold=0; fp_flush=0; chg_count=0;
+  state=S_FREE; redraw=1;
+}
+
 /* ───────────────────── Init ───────────────────── */
+/* Build a divider-line tile: the base colony/cursor pattern with the divider line
+ * (colour 3 = both bitplanes) OR-ed onto one edge column. right=1 -> right edge
+ * (blue home / neutral boundary); right=0 -> left edge (neutral / red home). */
+static void set_tile_div(u16 idx, const u8 *base, u8 right){
+  u8 mask = right ? (u8)0x01 : (u8)0x80;
+  u8 p[16], i;
+  for(i=0;i<8;i++){ p[i*2]=(u8)(base[i*2]|mask); p[i*2+1]=(u8)(base[i*2+1]|mask); }
+  set_tile((u8)idx,p);
+}
+/* Build a grid-integrated tile: the base shape OR the board grid (patt_grid_gbc,
+ * a top + left 1px line in colour 3). Used for the GBC colony/cursor tiles so the
+ * grid is drawn by every cell and never breaks around a piece. */
+static void set_tile_grid(u16 idx, const u8 *base){
+  u8 p[16], i;
+  for(i=0;i<16;i++) p[i]=(u8)(base[i]|patt_grid_gbc[i]);
+  set_tile((u8)idx,p);
+}
 static void load_tiles(void){
   u8 i;
   set_tile(T_BLANK,patt_blank);
@@ -1764,6 +2041,7 @@ static void load_tiles(void){
   set_tile(T_GRIDH_D,patt_gridh_d);
   set_tile(T_GRIDBD_D,patt_gridbd_d);
   set_tile(T_GRIDRD_D,patt_gridrd_d);
+  set_tile(T_FPGRID,patt_fpgrid);
   set_tile(T_WALL,patt_wall);
   set_tile(T_BORDER,patt_border);
   set_tile(T_STAR,patt_star);
@@ -1773,11 +2051,45 @@ static void load_tiles(void){
   set_tile(T_HBAR,patt_hbar);
   set_tile(T_HBARB,patt_hbarb);
   set_tile(T_HBART,patt_hbart);
+  set_tile(T_HBARC,patt_hbarc);
   set_tile(T_BLUEC,patt_bluec);
   set_tile(T_REDC,patt_redc);
   set_tile(T_DECOL,patt_decol);
   set_tile(T_DECOR,patt_decor);
   set_tile(T_DIAM,patt_diam);
+  /* GBC: override the four colony tiles with their colour-index-1/2 versions so
+   * the board can be coloured purely by static zone attribute and animated with
+   * tile-only (bank 0) writes — no per-cell colour writes, no flicker, no stale
+   * "celeste" cells. DMG keeps the colour-3 shapes loaded above. */
+  if(is_gbc()){
+    set_tile(T_BLUE,patt_blue_c);     /* plain colony tiles: free play + title gliders */
+    set_tile(T_RED,patt_red_c);
+    set_tile(T_BLUEC,patt_bluec_c);
+    set_tile(T_REDC,patt_redc_c);
+    set_tile(T_GRID,patt_grid_gbc);   /* main-board empty cells: board grid, not a dot */
+    /* main-board colony tiles WITH the grid baked in, so the grid never breaks
+     * around a piece, plus the two player-coloured cursor boxes */
+    set_tile_grid(T_BLUE_G, patt_blue_c);
+    set_tile_grid(T_RED_G,  patt_red_c);
+    set_tile_grid(T_BLUEC_G,patt_bluec_c);
+    set_tile_grid(T_REDC_G, patt_redc_c);
+    set_tile(T_CURSOR_B, patt_cursor_b);
+    set_tile(T_CURSOR_R, patt_cursor_r);
+  }
+  /* Divider-line variants of the colony/cursor tiles (see board_tile), built from
+   * whichever colony patterns this build uses (GBC colour-1/2, or DMG colour-3).
+   * On GBC the line is colour 3 = zone-dark, matching the empty boundary tiles. */
+  {
+    const u8 *pb  = is_gbc()?patt_blue_c :patt_blue;
+    const u8 *pr  = is_gbc()?patt_red_c  :patt_red;
+    const u8 *pbc = is_gbc()?patt_bluec_c:patt_bluec;
+    const u8 *prc = is_gbc()?patt_redc_c :patt_redc;
+    set_tile_div(T_DIVR+0, pb, 1);  set_tile_div(T_DIVL+0, pb, 0);
+    set_tile_div(T_DIVR+1, pr, 1);  set_tile_div(T_DIVL+1, pr, 0);
+    set_tile_div(T_DIVR+2, pbc,1);  set_tile_div(T_DIVL+2, pbc,0);
+    set_tile_div(T_DIVR+3, prc,1);  set_tile_div(T_DIVL+3, prc,0);
+    set_tile_div(T_DIVR+4, patt_cursor,1); set_tile_div(T_DIVL+4, patt_cursor,0);
+  }
   for(i=0;i<GLYPH_COUNT;i++) set_font_tile(T_FONT_BASE+i,FONT[i]);
 }
 
@@ -1791,21 +2103,33 @@ static void load_tiles(void){
  *   pal 4 — paper: white field for menus/text */
 static void init_palettes(void) {
   if (!is_gbc()) return;
-  /* RGB5(r,g,b), 0..31 each. Color 0 = field (light), color 3 = ink (dark). */
-  set_bg_palette(0, RGB5(20,26,16), RGB5(13,20,10), RGB5(6,12,5),  RGB5(2,5,2));    /* green board */
-  /* Blue & red colonies pushed to vivid, well-separated hues so they're easy to
-   * tell apart even on a dim screen: pale tinted field (color 0) up to a bright
-   * saturated colony ink (color 3) — electric blue vs. pure red, ~2x further
-   * apart in color than before. */
-  set_bg_palette(1, RGB5(21,27,31), RGB5(10,17,31), RGB5(3,9,31),   RGB5(0,4,24));   /* blue */
-  set_bg_palette(2, RGB5(31,24,20), RGB5(31,12,9),  RGB5(31,3,3),   RGB5(22,0,0));   /* red */
-  set_bg_palette(3, RGB5(13,14,18), RGB5(20,21,25), RGB5(26,27,30), RGB5(31,31,31)); /* soft light-grey highlight */
+  /* RGB5(r,g,b), 0..31 each. The three BOARD palettes (0,1,2) now share a fixed
+   * meaning per colour slot so a cell's colour comes from its TILE, not its
+   * palette: c0 = zone field (the only thing that differs between them), c1 =
+   * BLUE colony, c2 = RED colony, c3 = zone-dark ink (dots/dividers). Because c1
+   * is always blue and c2 always red, a colony reads correctly in ANY zone, so
+   * every board cell's palette attribute is simply its (never-changing) zone.
+   * That is what lets the running board animate with tile-only writes and never
+   * touch colour attributes — killing the GBC flicker with no stale cells. */
+  set_bg_palette(0, RGB5(20,26,16), RGB5(3,9,31), RGB5(31,3,3), RGB5(2,5,2));    /* neutral field */
+  set_bg_palette(1, RGB5(21,27,31), RGB5(3,9,31), RGB5(31,3,3), RGB5(2,9,22));   /* blue-zone field */
+  set_bg_palette(2, RGB5(31,24,20), RGB5(3,9,31), RGB5(31,3,3), RGB5(20,2,2));   /* red-zone field  */
+  /* pal 3 — FREE PLAY board: single palette (see draw_free_board). c0 field,
+   * c1 = live-cell blue (T_BLUE is a colour-1 tile on GBC), c3 = neutral dot &
+   * cursor ring. */
+  set_bg_palette(3, RGB5(20,26,16), RGB5(3,9,31), RGB5(10,17,31), RGB5(7,11,7)); /* free-play */
   set_bg_palette(4, RGB5(31,31,31), RGB5(21,21,21), RGB5(10,10,10),RGB5(0,0,0));    /* paper */
   /* dark "cartridge label" palettes for the title screen:
-   * color 0 = near-black field, 3 = bright ink, so text/art glows on dark. */
+   * color 0 = near-black field, 3 = bright ink, so text/art glows on dark.
+   * The gliders use the colony tiles (now colour 1 = blue glider on pal 6,
+   * colour 2 = red glider on pal 7), so those slots carry the glider glow. */
   set_bg_palette(5, RGB5(2,2,5),   RGB5(7,7,12),   RGB5(16,16,22), RGB5(30,30,31)); /* dark + white ink */
-  set_bg_palette(6, RGB5(2,3,7),   RGB5(6,12,26),  RGB5(12,20,31), RGB5(22,28,31)); /* dark + cyan/blue glow */
-  set_bg_palette(7, RGB5(6,2,4),   RGB5(24,6,6),   RGB5(31,12,8),  RGB5(31,22,18)); /* dark + red/orange glow */
+  /* Glow palettes for the title gliders. c0 MATCHES pal 5's field (2,2,5) so a
+   * glider cell blends into the starfield with no visible box; the glider colour
+   * (c1 cyan on pal 6, c2 red on pal 7) is pushed bright for contrast on the dark
+   * field, with c3 the matching sparkle glow. */
+  set_bg_palette(6, RGB5(2,2,5),   RGB5(24,31,31), RGB5(12,20,31), RGB5(24,31,31)); /* dark + bright cyan (c1=glider) */
+  set_bg_palette(7, RGB5(2,2,5),   RGB5(24,6,6),   RGB5(31,13,10), RGB5(31,20,16)); /* dark + bright red  (c2=glider) */
 }
 
 void main(void){
@@ -1839,7 +2163,7 @@ void main(void){
 
     switch(state){
       case S_TITLE:
-        if(redraw){ anim=0; draw_title(); gymno_start(); redraw=0; }
+        if(redraw){ anim=0; draw_title(); if(g_music_on) gymno_start(); redraw=0; }
         anim++;
         gymno_tick();                          /* Silent-Hill-style theme, looping */
         /* twinkle the sparkle constellation between the gliders */
@@ -1851,13 +2175,13 @@ void main(void){
         if(pressed & BTN_START){ sfx_select(); rSCY=0xFF; state=S_MENU; menu_sel=1; redraw=1; }
         break;
       case S_MENU:
-        if(redraw){ draw_menu(); if(!mel_playing) gymno_start(); redraw=0; }
+        if(redraw){ draw_menu(); if(!mel_playing && g_music_on) gymno_start(); redraw=0; }
         gymno_tick();
         if(konami_step(pressed)){ sfx_win(); state=S_ACK; redraw=1; break; }
         {
           u8 oldsel=menu_sel, moved=0;
           if(pressed & PAD_UP){ if(menu_sel>0)menu_sel--; sfx_move(); moved=1; }
-          if(pressed & PAD_DOWN){ if(menu_sel<5)menu_sel++; sfx_move(); moved=1; }
+          if(pressed & PAD_DOWN){ if(menu_sel<6)menu_sel++; sfx_move(); moved=1; }
           if(moved && menu_sel!=oldsel){
             /* move the '>' marker only — plain menu, no color to change */
             u8 oy=(u8)(4+oldsel*2), ny=(u8)(4+menu_sel*2);
@@ -1868,12 +2192,90 @@ void main(void){
         }
         if(pressed & BTN_A){
           sfx_select();
-          if(menu_sel==0){ lang ^= 1; lang_save(); redraw=1; }  /* toggle EN/ES, persist */
-          else if(menu_sel==1){ vs_cpu=1; menu_sel=1; state=S_DIFF; redraw=1; }
-          else if(menu_sel==2){ menu_sel=0; state=S_2PMENU; redraw=1; }
-          else if(menu_sel==3){ help_page=0; state=S_HELP; redraw=1; }
-          else if(menu_sel==4){ stats_reset_hold=0; state=S_STATS; redraw=1; }
-          else { state=S_CREDITS; redraw=1; }
+          if(menu_sel==0){ help_page=0; state=S_HELP; redraw=1; }        /* HOW TO PLAY */
+          else if(menu_sel==1){ vs_cpu=1; menu_sel=1; state=S_DIFF; redraw=1; }  /* VS CPU */
+          else if(menu_sel==2){ menu_sel=0; state=S_2PMENU; redraw=1; }  /* 2 PLAYERS */
+          else if(menu_sel==3){ start_free(); }                          /* FREE PLAY */
+          else if(menu_sel==4){ menu_sel=0; state=S_OPTIONS; redraw=1; } /* OPTIONS */
+          else if(menu_sel==5){ stats_reset_hold=0; state=S_STATS; redraw=1; } /* STATS */
+          else { state=S_CREDITS; redraw=1; }                            /* CREDITS */
+        }
+        break;
+      case S_OPTIONS:
+        if(redraw){ draw_options(); redraw=0; }
+        gymno_tick();
+        {
+          u8 oldsel=menu_sel, moved=0;
+          if(pressed & PAD_UP){ if(menu_sel>0)menu_sel--; sfx_move(); moved=1; }
+          if(pressed & PAD_DOWN){ if(menu_sel<2)menu_sel++; sfx_move(); moved=1; }
+          if(moved && menu_sel!=oldsel){
+            u8 oy=(u8)(7+oldsel*2), ny=(u8)(7+menu_sel*2);
+            wait_vbl();
+            map_put(3,oy,T_BLANK);
+            map_put(3,ny,T_FONT_BASE+glyph_of('>'));
+          }
+        }
+        if(pressed & BTN_A){
+          sfx_select();
+          if(menu_sel==0){ lang ^= 1; lang_save(); redraw=1; }      /* language */
+          else if(menu_sel==1){                                     /* music */
+            g_music_on ^= 1; audio_save();
+            if(g_music_on){ gymno_start(); }                        /* resume theme */
+            else { mel_stop(); mel_playing=0; }                     /* silence now */
+            redraw=1;
+          } else {                                                  /* SFX */
+            g_sfx_on ^= 1; audio_save();
+            if(g_sfx_on) sfx_select();                              /* audible confirm */
+            redraw=1;
+          }
+        }
+        if(pressed & BTN_B){ sfx_back(); state=S_MENU; menu_sel=4; redraw=1; }
+        break;
+      case S_FREE:
+        if(redraw){ draw_free_board(); redraw=0; }
+        /* Continuous simulation, flicker-free on GBC: the board runs on ONE fixed
+         * palette (set with the LCD off in draw_free_board), so each generation
+         * only TILES change — streamed to bank 0 a budget at a time during VBlank,
+         * never touching colour attributes. The heavy step + change-list build is
+         * pure RAM work done BEFORE syncing to VBlank, so the blanking window is
+         * spent only on the short tile writes (no active-display drops -> no stale
+         * "celeste" cells, and no LCD-off flash). */
+        if(fp_running){
+          if(fp_flush < chg_count){
+            wait_vbl();                            /* align to VBlank start */
+            fp_blit_changes(&fp_flush, FP_BUDGET); /* keep streaming this gen */
+          } else if(fp_hold){
+            fp_hold--;
+          } else {
+            snapshot_board();
+            step();
+            fp_build_changes();                    /* heavy: RAM only, pre-VBlank */
+            fp_flush=0; fp_hold=FP_HOLD;
+            wait_vbl();
+            fp_blit_changes(&fp_flush, FP_BUDGET);
+          }
+        }
+        {
+          u8 ocx=cx, ocy=cy, moved=0;
+          if(pressed & PAD_LEFT){ if(cx>0)cx--; moved=1; }
+          if(pressed & PAD_RIGHT){ if(cx<BW-1)cx++; moved=1; }
+          if(pressed & PAD_UP){ if(cy>0)cy--; moved=1; }
+          if(pressed & PAD_DOWN){ if(cy<BH-1)cy++; moved=1; }
+          if(pressed & BTN_A){
+            /* paint: toggle the cell under the cursor between empty and alive */
+            u8 *c=&board[cy*BW+cx];
+            *c = (*c)?DEAD:BLUE;
+            sfx_place();
+            wait_vbl(); fp_draw_cell(cx,cy);
+          }
+          if(pressed & BTN_B){ fp_running ^= 1; sfx_select(); redraw=1; }  /* run/stop */
+          if(pressed & BTN_SELECT){ clear_board(); fp_running=0; sfx_back(); redraw=1; }
+          if(pressed & BTN_START){ sfx_select(); state=S_MENU; menu_sel=3; redraw=1; }
+          if(moved){
+            wait_vbl();
+            fp_draw_cell(ocx,ocy);
+            fp_draw_cell(cx,cy);
+          }
         }
         break;
       case S_2PMENU:
@@ -1949,17 +2351,17 @@ void main(void){
         gymno_tick();
         if(pressed & BTN_A){
           if(help_page<3){ sfx_select(); help_page++; redraw=1; }   /* next page */
-          else { sfx_back(); state=S_MENU; menu_sel=3; redraw=1; }  /* page 4 -> menu */
+          else { sfx_back(); state=S_MENU; menu_sel=0; redraw=1; }  /* page 4 -> menu */
         }
         if(pressed & BTN_B){
           if(help_page>0){ sfx_back(); help_page--; redraw=1; }     /* previous page */
-          else { sfx_back(); state=S_MENU; menu_sel=3; redraw=1; }  /* page 1 -> menu */
+          else { sfx_back(); state=S_MENU; menu_sel=0; redraw=1; }  /* page 1 -> menu */
         }
         break;
       case S_CREDITS:
         if(redraw){ draw_credits(); redraw=0; }
         gymno_tick();
-        if(pressed & BTN_B){ sfx_back(); state=S_MENU; menu_sel=5; redraw=1; }
+        if(pressed & BTN_B){ sfx_back(); state=S_MENU; menu_sel=6; redraw=1; }
         break;
       case S_ACK:
         if(redraw){ draw_ack(); redraw=0; }
@@ -1980,7 +2382,7 @@ void main(void){
         } else {
           stats_reset_hold=0;
         }
-        if(pressed & BTN_B){ sfx_back(); state=S_MENU; menu_sel=4; redraw=1; }
+        if(pressed & BTN_B){ sfx_back(); state=S_MENU; menu_sel=5; redraw=1; }
         break;
       case S_PAUSE:
         if(redraw){ draw_pause(); redraw=0; }
