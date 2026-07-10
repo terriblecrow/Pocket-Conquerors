@@ -1,0 +1,30 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  rom:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SDCC
+        run: sudo apt-get update && sudo apt-get install -y sdcc
+
+      - name: Build both ROMs
+        run: ./build.sh
+
+      - name: AI regression harness
+        run: |
+          cc -O2 -o tools/ai_sim tools/ai_sim.c
+          ./tools/ai_sim
+
+      - name: Upload ROMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: conways-conquerors-roms
+          path: |
+            conways-conquerors-gbc.gb
+            conways-conquerors-dmg.gb
