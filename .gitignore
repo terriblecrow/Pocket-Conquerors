@@ -1,0 +1,15 @@
+# Build output
+build/
+*.gb
+
+# Emulator saves
+*.sav
+*.ram
+
+# Compiled AI harness
+tools/ai_sim
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
